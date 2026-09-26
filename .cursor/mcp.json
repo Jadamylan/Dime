@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "XcodeBuildMCP": {
+      "command": "/Users/jadaharris/.nvm/versions/node/v24.20.0/bin/xcodebuildmcp",
+      "args": ["mcp"],
+      "env": {
+        "XCODEBUILDMCP_ENABLED_WORKFLOWS": "simulator,ui-automation,debugging"
+      }
+    }
+  }
+}

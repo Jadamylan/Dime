@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Dime uses the microphone so you can speak what you need help talking about.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Dime turns what you say into text so you can save the context for this conversation.</string>
+	<key>REVENUECAT_API_KEY</key>
+	<string>$(REVENUECAT_TEST_STORE_API_KEY)</string>
+</dict>
+</plist>
