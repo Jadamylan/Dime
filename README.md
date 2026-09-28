@@ -2,9 +2,13 @@
 
 ## Tell me in your language.
 
-**Dime is a face-to-face translation experience built around iPhone Duo.**
+**Two people. Two languages. One shared understanding.**
 
-The idea came from a simple question: if two people are sitting across from each other and do not speak the same language, why are we still designing translation like they should pass one phone back and forth?
+Dime is a face-to-face translation experience designed around the iPhone Duo form factor.
+
+The idea came from a simple question:
+
+> If two people are sitting across from each other and do not speak the same language, why are we still designing translation like they should pass one phone back and forth?
 
 With Duo, the fold becomes part of the interface.
 
@@ -16,7 +20,7 @@ The hackathon MVP focuses on **English ↔ Español communication in a healthcar
 
 ---
 
-## The interaction
+## The product idea
 
 ```text
 Person A speaks / types
@@ -31,39 +35,64 @@ Person B responds
 Conversation continues without passing the device
 ```
 
-The phone is not sitting between the conversation.
+The phone is not just sitting between the conversation.
 
 It becomes the thing helping the conversation happen.
 
 ---
 
+## Why the hardware matters
+
+Dime is not meant to be a standard translation app stretched across two screens.
+
+The interaction changes with the device:
+
+### Closed — prepare
+Choose the context, language pair, and input method.
+
+### Book pose — talk face to face
+Each person gets an upright view on their own side of the device.
+
+### Fully open — recap together
+Both people can review one shared summary of the conversation.
+
+That physical state change is the product thesis.
+
+---
+
 ## Why healthcare for the MVP?
 
-Translation is useful everywhere, but healthcare makes the stakes easy to understand.
+Translation is useful everywhere, but healthcare makes the communication problem easy to understand.
 
 The seeded demo centers on a prenatal conversation and includes:
 
 - English ↔ Español dialogue
 - clarification moments
-- an interpreter-request path
+- an always-reachable **Request professional interpreter** path
 - a shared recap at the end
 
-The MVP is not intended to replace a professional medical interpreter. It is a prototype exploring how the Duo form factor can make bilingual, face-to-face communication feel more natural.
+> **Dime translates the conversation and helps clarify meaning. It does not diagnose or recommend treatment.**
+
+The prototype is not intended to replace a professional medical interpreter.
 
 ---
 
-## Demo flow
+## Product principles
 
-### 1. Closed — prepare
-Choose **Healthcare**, speak or type the context, choose English ↔ Español, and continue.
+### Conversation first
+Two people should feel like they are talking to each other, not separately talking to a translation tool.
 
-### 2. Book pose — talk face to face
-Your side stays upright for you. The opposite side is oriented for the person across from you.
+### The form factor should earn its place
+If the experience works exactly the same on a normal slab phone, then Duo is not being used creatively enough.
 
-### 3. Fully open — recap together
-Both people can review one shared summary of the conversation.
+### Accessibility belongs in the interface
+Readable type, clear orientation, obvious turn-taking, and simple actions matter more than decorative UI.
 
-Saving the recap is the current **Dime Más** test-store step.
+### Translation is assistance, not authority
+Especially in healthcare, boundaries and escalation paths have to be visible.
+
+### Keep the interface calm
+The visual system intentionally avoids dense dashboards, gradients, and unnecessary glass effects. The product uses the system typeface and familiar SF Symbols for actions.
 
 ---
 
@@ -126,26 +155,8 @@ The app target is intentionally thin. Most feature work lives in `DimePackage`.
 - **Swift 6+ concurrency patterns**
 - **Swift Testing + XCUITest**
 - **RevenueCat Test Store** for the Dime Más prototype
-- **AI-assisted development rules** for Cursor / Claude Code / GitHub Copilot
-- scaffolded with **XcodeBuildMCP**
-
----
-
-## Product principles
-
-A few things I wanted Dime to get right:
-
-### Conversation first
-The app should not make two people feel like they are separately talking to a translation tool.
-
-### The form factor should matter
-If the experience works exactly the same on a normal slab phone, then I am probably not using Duo creatively enough.
-
-### Accessibility is part of the interface
-Readable type, clear orientation, and obvious turn-taking matter more than decorative UI.
-
-### Translation is assistance, not authority
-Especially in healthcare, the product needs clear boundaries around what it can and cannot replace.
+- **XcodeBuildMCP** for scaffold/build support
+- repo-level instructions for AI-assisted development in Cursor / Claude Code / GitHub Copilot
 
 ---
 
@@ -153,11 +164,13 @@ Especially in healthcare, the product needs clear boundaries around what it can 
 
 Dime came out of a hackathon challenge around designing specifically for iPhone Duo.
 
-Translation was already an obvious use case — which also meant the interesting part was not simply **“can I translate text?”**
+Translation was already an obvious use case. That meant the interesting part was not simply:
 
-The interesting part was:
+**“Can I translate text?”**
 
-**What does translation look like when the hardware finally lets both people have a side?**
+It was:
+
+**“What does translation look like when the hardware finally lets both people have a side?”**
 
 That is the product idea I wanted to test.
 
@@ -169,7 +182,7 @@ That is the product idea I wanted to test.
 - more language pairs
 - larger accessibility controls
 - clearer conversation-state cues
-- optional domain modes beyond healthcare
+- optional modes beyond healthcare
 - stronger interpreter-escalation flows
 - better recap controls and consent choices
 
