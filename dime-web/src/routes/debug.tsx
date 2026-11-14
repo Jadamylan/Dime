@@ -5,6 +5,8 @@ import { useRoom } from "@/lib/useRoom";
 export const Route = createFileRoute("/debug")({
   head: () => ({
     meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
       { title: "Diagnostics — Dime" },
       { name: "description", content: "Safe connection and mode diagnostics for Dime." },
       { property: "og:title", content: "Diagnostics — Dime" },
@@ -27,6 +29,10 @@ function Debug() {
     ["Phase", r.phase],
     ["Error", r.error ?? "—"],
     ["Signaling", r.signaling],
+    ["Join stage", r.stage],
+    ["ICE state", r.diag.ice],
+    ["Last OK step", r.diag.lastOk],
+    ["Last error", r.diag.lastError],
     ["Pair", r.pair ? `${r.pair.host} → ${r.pair.guest}` : "—"],
     ["Typed ready", String(r.typedReady)],
     ["Live ready", String(r.liveReady)],
@@ -54,6 +60,12 @@ function Debug() {
           </div>
         ))}
       </dl>
+      <section className="rounded-3xl bg-card p-4">
+        <h2 className="mb-2 font-semibold">Handshake log</h2>
+        <ol className="space-y-1 font-mono text-xs">
+          {r.diag.events.length ? r.diag.events.map((e, i) => <li key={i}>{e}</li>) : <li>—</li>}
+        </ol>
+      </section>
       <Link to="/check" className="tap inline-flex items-center underline">
         Preflight check
       </Link>

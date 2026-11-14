@@ -13,6 +13,8 @@ import {
   stopTalking,
 } from "@/lib/room";
 import { nav as navFlags, useRoom } from "@/lib/useRoom";
+import { canCreateInvitation } from "@/config/publicUrl";
+import { PublishedInvitationNotice } from "@/components/dime/PublishedInvitationNotice";
 
 export const Route = createFileRoute("/host")({
   validateSearch: (s: Record<string, unknown>) => ({
@@ -21,6 +23,8 @@ export const Route = createFileRoute("/host")({
   }),
   head: () => ({
     meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
       { title: "Host a conversation — Dime" },
       { name: "description", content: "Show this QR code to start a translated conversation." },
       { property: "og:title", content: "Host a conversation — Dime" },
@@ -38,11 +42,12 @@ function HostPage() {
   const pair = validPair(h, g);
   const room = useRoom();
   const navigate = useNavigate();
-  const [framed, setFramed] = useState(false);
+  const [invitationAllowed, setInvitationAllowed] = useState(false);
 
   useEffect(() => {
-    setFramed(window.self !== window.top);
-    if (pair && !hasActiveHost()) void openHost(pair);
+    const allowed = canCreateInvitation(window.location.hostname);
+    setInvitationAllowed(allowed);
+    if (allowed && pair && !hasActiveHost()) void openHost(pair);
     return () => {
       if (navFlags.keepHostAlive) navFlags.keepHostAlive = false;
       else leave();
@@ -56,6 +61,10 @@ function HostPage() {
     }
     return undefined;
   }, [room.justJoined]);
+
+  if (!invitationAllowed) {
+    return <main className="safe-pad mx-auto flex min-h-dvh max-w-md flex-col items-center justify-center"><PublishedInvitationNotice /></main>;
+  }
 
   if (!pair) {
     return (
@@ -103,7 +112,7 @@ function HostPage() {
 
   if (room.phase === "connected" || room.phase === "reconnecting") {
     return (
-      <main className="safe-pad mx-auto flex h-dvh max-w-xl flex-col">
+      <main className="conversation-page mx-auto flex max-w-xl flex-col">
         {room.phase === "reconnecting" && (
           <p
             role="status"
@@ -138,12 +147,6 @@ function HostPage() {
 
   return (
     <main className="safe-pad mx-auto flex min-h-dvh max-w-md flex-col items-center justify-center gap-4">
-      {framed && (
-        <p className="rounded-2xl bg-clarify px-4 py-2 text-center text-sm text-clarify-foreground">
-          Preview frame: open the published app in its own tab so the QR points to a reachable
-          address.
-        </p>
-      )}
       <Invite pair={pair} url={room.phase === "waiting" ? room.joinUrl : ""} onCancel={cancel} />
       {!room.typedReady && (
         <button

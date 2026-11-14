@@ -21,7 +21,7 @@ export function LangSelect({
         className="tap w-full appearance-none rounded-2xl bg-card px-5 py-4 text-2xl font-semibold"
       >
         {LANG_CODES.map((c) => (
-          <option key={c} value={c} lang={c}>
+          <option key={c} value={c} lang={LANGUAGES[c].locale} dir={LANGUAGES[c].dir}>
             {LANGUAGES[c].endonym}
           </option>
         ))}

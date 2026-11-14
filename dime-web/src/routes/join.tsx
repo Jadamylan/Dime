@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { fill, ui, type LangCode } from "@/config/languages";
+import { fill, ui, LANGUAGES, type LangCode } from "@/config/languages";
 import { Conversation } from "@/components/dime/Conversation";
 import { Wordmark } from "@/components/dime/Wordmark";
 import {
@@ -17,6 +17,8 @@ import { useRoom } from "@/lib/useRoom";
 export const Route = createFileRoute("/join")({
   head: () => ({
     meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
       { title: "Join a conversation — Dime" },
       { name: "description", content: "Join a translated conversation from a Dime QR code." },
       { property: "og:title", content: "Join a conversation — Dime" },
@@ -33,7 +35,7 @@ function JoinPage() {
   const [info, setInfo] = useState<ReturnType<typeof parseJoinHash> | "bad" | null>(null);
   const room = useRoom();
   useEffect(() => {
-    setInfo(parseJoinHash(window.location.hash) ?? "bad");
+    setInfo(parseJoinHash(window.location.search || window.location.hash) ?? "bad");
     return () => leave();
   }, []);
   useEffect(() => {
@@ -67,7 +69,7 @@ function JoinPage() {
 
   if (room.phase === "connected" || room.phase === "reconnecting") {
     return (
-      <main className="safe-pad mx-auto flex h-dvh max-w-xl flex-col">
+      <main className="conversation-page mx-auto flex max-w-xl flex-col">
         {room.phase === "reconnecting" && (
           <p
             role="status"
@@ -109,6 +111,8 @@ function JoinPage() {
             timeout: t.errTimeout,
             signal: t.errSignal,
             roomgone: t.errRoomGone,
+            channel: t.errChannel,
+            noack: t.errNoAck,
           } as Record<string, string>
         )[room.error ?? "timeout"] ?? t.errTimeout)
       : null;
@@ -116,7 +120,8 @@ function JoinPage() {
   return (
     <main
       className="safe-pad mx-auto flex min-h-dvh max-w-md flex-col items-center justify-center gap-8 text-center"
-      lang={g}
+      lang={LANGUAGES[g].locale}
+      dir={LANGUAGES[g].dir}
     >
       <Wordmark size="sm" lang={g} />
       <div className="space-y-3">
@@ -131,13 +136,30 @@ function JoinPage() {
           {err}
         </p>
       )}
+      {err && (
+        <details className="w-full text-left text-sm text-muted-foreground">
+          <summary>Details</summary>
+          <p>ICE: {room.diag.ice} · last OK: {room.diag.lastOk}</p>
+          <ol className="font-mono text-xs">
+            {room.diag.events.map((e, i) => (
+              <li key={i}>{e}</li>
+            ))}
+          </ol>
+        </details>
+      )}
       {room.phase === "ended" && <p className="text-lg">{t.ended}</p>}
       <button
         disabled={busy}
         onClick={() => void joinRoom(info)}
         className="tap w-full rounded-full bg-primary py-5 text-2xl font-semibold text-primary-foreground disabled:opacity-60"
       >
-        {busy ? t.joining : err ? t.retry : t.join}
+        {busy
+          ? room.stage === "connecting"
+            ? t.stageConnecting
+            : room.stage === "waitingHost"
+              ? t.stageWaiting
+              : t.stageInvite
+          : err ? t.retry : t.join}
       </button>
     </main>
   );

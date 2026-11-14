@@ -1,6 +1,8 @@
 import { QRCodeSVG } from "qrcode.react";
 import { useState } from "react";
-import { fill, ui, type LangCode } from "@/config/languages";
+import { fill, ui, LANGUAGES, type LangCode } from "@/config/languages";
+import { isPublicInvitationUrl } from "@/config/publicUrl";
+import { PublishedInvitationNotice } from "./PublishedInvitationNotice";
 
 export function Invite({
   pair,
@@ -15,8 +17,11 @@ export function Invite({
 }) {
   const t = ui(pair.guest);
   const [copied, setCopied] = useState(false);
+  if (url && !isPublicInvitationUrl(url, demo)) return <PublishedInvitationNotice />;
   return (
-    <div className="flex flex-col items-center gap-5 text-center" lang={pair.guest}>
+    <div className="flex flex-col items-center gap-5 text-center" lang={LANGUAGES[pair.guest].locale}
+      dir={LANGUAGES[pair.guest].dir}
+    >
       <h1 className="text-4xl font-bold leading-tight">{t.inviteTitle}</h1>
       <p className="max-w-xs text-xl leading-snug">{fill(t.inviteBody, pair.guest, pair)}</p>
       <div className="rounded-3xl bg-qr-bg p-5 shadow-sm">
@@ -28,7 +33,7 @@ export function Invite({
             fgColor="#000000"
             level="M"
             marginSize={1}
-            aria-label={demo ? "Demo QR (does not join)" : "Join QR code"}
+            aria-label={demo ? "Demo QR (opens the demo)" : "Join QR code"}
             role="img"
           />
         ) : (

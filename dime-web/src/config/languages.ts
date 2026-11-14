@@ -1,4 +1,6 @@
-export type LangCode = "en" | "es";
+export type LangCode = "en" | "es" | "fr" | "pt" | "de" | "it" | "ar" | "zh" | "ja" | "ko";
+/** Languages with a full interface translation; others fall back to English copy. */
+export type UiLang = "en" | "es";
 
 export interface UiStrings {
   tagline: string;
@@ -19,6 +21,11 @@ export interface UiStrings {
   waitingPeer: string;
   join: string;
   joining: string;
+  stageInvite: string;
+  stageConnecting: string;
+  stageWaiting: string;
+  errChannel: string;
+  errNoAck: string;
   joinTitle: string;
   joinBody: string;
   joined: string;
@@ -66,11 +73,25 @@ export interface UiStrings {
   them: string;
   host: string;
   guest: string;
+  voiceNote: string;
+  useCase: string;
+  ready: string;
+  finishTalking: string;
+  voiceMode: string;
+  writeMessage: string;
+  correctText: string;
+  sayNewTurn: string;
 }
 
 export interface LanguageDef {
   code: LangCode;
+  /** BCP-47 locale for the browser (lang attribute, speech voices). */
   locale: string;
+  /** Google Cloud Translation v2 language code. */
+  translateCode: string;
+  /** Gemini Live voice translation; only pairs where both sides are true offer live voice. */
+  liveVoice: boolean;
+  dir: "ltr" | "rtl";
   endonym: string;
   /** Name of this language as written in every UI language */
   names: Record<LangCode, string>;
@@ -95,10 +116,17 @@ const en: UiStrings = {
   waitingPeer: "Preparing invitation…",
   join: "Join",
   joining: "Joining…",
+  stageInvite: "Opening invite…",
+  stageConnecting: "Connecting to the other phone…",
+  stageWaiting: "Waiting for host…",
+  errChannel:
+    "Reached the connection service, but the phones could not link directly. Put both phones on the same Wi‑Fi or one phone's hotspot, then retry.",
+  errNoAck:
+    "The host phone didn't answer. Keep the host's invite screen open and unlocked, then retry.",
   joinTitle: "Join conversation",
   joinBody: "Tap Join to talk in {guest}. They speak {host}.",
   joined: "They joined. You can start speaking.",
-  typedMode: "Typed: translated per message",
+  typedMode: "Typed · translated per message",
   typePlaceholder: "Type a message",
   send: "Send",
   pending: "Sending…",
@@ -142,6 +170,15 @@ const en: UiStrings = {
   them: "Them",
   host: "Host",
   guest: "Guest",
+  useCase:
+    "Walk into a salon or local business and make a plan, even when you speak different languages.",
+  voiceNote: "Live voice: English ↔ Spanish. Other languages use typed translation.",
+  ready: "Ready",
+  finishTalking: "Tap when finished",
+  voiceMode: "Voice · live captions",
+  writeMessage: "Write message",
+  correctText: "Type a correction",
+  sayNewTurn: "Say again",
 };
 
 const es: UiStrings = {
@@ -162,10 +199,17 @@ const es: UiStrings = {
   waitingPeer: "Preparando invitación…",
   join: "Unirme",
   joining: "Uniéndome…",
+  stageInvite: "Abriendo la invitación…",
+  stageConnecting: "Conectando con el otro teléfono…",
+  stageWaiting: "Esperando al anfitrión…",
+  errChannel:
+    "Llegamos al servicio, pero los teléfonos no pudieron enlazarse. Conecten ambos a la misma Wi‑Fi o al punto de acceso de uno, y reintenten.",
+  errNoAck:
+    "El teléfono anfitrión no respondió. Mantén abierta y desbloqueada la invitación, y reintenta.",
   joinTitle: "Unirse a la conversación",
   joinBody: "Toca Unirme para hablar en {guest}. La otra persona habla {host}.",
   joined: "Se unió. Ya puedes empezar a hablar.",
-  typedMode: "Escrito: traducido por mensaje",
+  typedMode: "Escrito · traducido por mensaje",
   typePlaceholder: "Escribe un mensaje",
   send: "Enviar",
   pending: "Enviando…",
@@ -207,27 +251,260 @@ const es: UiStrings = {
   errTooLong: "Mensaje demasiado largo (máximo 500 caracteres).",
   reconnecting: "Reconectando…",
   you: "Tú",
-  them: "Ellos",
+  them: "Otra persona",
   host: "Anfitrión",
   guest: "Invitado",
+  useCase: "Entra a un salón o negocio local y hagan un plan, aunque hablen idiomas distintos.",
+  voiceNote: "Voz en vivo: español ↔ inglés. Los demás idiomas usan traducción escrita.",
+  ready: "Listo",
+  finishTalking: "Toca para terminar",
+  voiceMode: "Voz · subtítulos en vivo",
+  writeMessage: "Escribe un mensaje",
+  correctText: "Corregir texto",
+  sayNewTurn: "Decir de nuevo",
 };
+
+type Names = Record<LangCode, string>;
+// NAMES[uiLang][lang] = name of `lang` written in `uiLang` (used in invite sentences).
+const NAMES: Record<LangCode, Names> = {
+  en: {
+    en: "English",
+    es: "Spanish",
+    fr: "French",
+    pt: "Portuguese",
+    de: "German",
+    it: "Italian",
+    ar: "Arabic",
+    zh: "Simplified Chinese",
+    ja: "Japanese",
+    ko: "Korean",
+  },
+  es: {
+    en: "inglés",
+    es: "español",
+    fr: "francés",
+    pt: "portugués",
+    de: "alemán",
+    it: "italiano",
+    ar: "árabe",
+    zh: "chino simplificado",
+    ja: "japonés",
+    ko: "coreano",
+  },
+  fr: {
+    en: "anglais",
+    es: "espagnol",
+    fr: "français",
+    pt: "portugais",
+    de: "allemand",
+    it: "italien",
+    ar: "arabe",
+    zh: "chinois simplifié",
+    ja: "japonais",
+    ko: "coréen",
+  },
+  pt: {
+    en: "inglês",
+    es: "espanhol",
+    fr: "francês",
+    pt: "português",
+    de: "alemão",
+    it: "italiano",
+    ar: "árabe",
+    zh: "chinês simplificado",
+    ja: "japonês",
+    ko: "coreano",
+  },
+  de: {
+    en: "Englisch",
+    es: "Spanisch",
+    fr: "Französisch",
+    pt: "Portugiesisch",
+    de: "Deutsch",
+    it: "Italienisch",
+    ar: "Arabisch",
+    zh: "vereinfachtes Chinesisch",
+    ja: "Japanisch",
+    ko: "Koreanisch",
+  },
+  it: {
+    en: "inglese",
+    es: "spagnolo",
+    fr: "francese",
+    pt: "portoghese",
+    de: "tedesco",
+    it: "italiano",
+    ar: "arabo",
+    zh: "cinese semplificato",
+    ja: "giapponese",
+    ko: "coreano",
+  },
+  ar: {
+    en: "الإنجليزية",
+    es: "الإسبانية",
+    fr: "الفرنسية",
+    pt: "البرتغالية",
+    de: "الألمانية",
+    it: "الإيطالية",
+    ar: "العربية",
+    zh: "الصينية المبسطة",
+    ja: "اليابانية",
+    ko: "الكورية",
+  },
+  zh: {
+    en: "英语",
+    es: "西班牙语",
+    fr: "法语",
+    pt: "葡萄牙语",
+    de: "德语",
+    it: "意大利语",
+    ar: "阿拉伯语",
+    zh: "简体中文",
+    ja: "日语",
+    ko: "韩语",
+  },
+  ja: {
+    en: "英語",
+    es: "スペイン語",
+    fr: "フランス語",
+    pt: "ポルトガル語",
+    de: "ドイツ語",
+    it: "イタリア語",
+    ar: "アラビア語",
+    zh: "簡体字中国語",
+    ja: "日本語",
+    ko: "韓国語",
+  },
+  ko: {
+    en: "영어",
+    es: "스페인어",
+    fr: "프랑스어",
+    pt: "포르투갈어",
+    de: "독일어",
+    it: "이탈리아어",
+    ar: "아랍어",
+    zh: "중국어(간체)",
+    ja: "일본어",
+    ko: "한국어",
+  },
+};
+/** byLang[x] = name of this language written in x. */
+const namesOf = (code: LangCode) =>
+  Object.fromEntries(Object.keys(NAMES).map((u) => [u, NAMES[u as LangCode][code]])) as Names;
+
+type InviteCopy = Pick<UiStrings, "inviteTitle" | "inviteBody" | "joinTitle" | "joinBody" | "join">;
+function extra(
+  code: LangCode,
+  locale: string,
+  translateCode: string,
+  endonym: string,
+  copy: InviteCopy,
+  dir: "ltr" | "rtl" = "ltr",
+): LanguageDef {
+  // Only the guest-facing invite/join copy is localized; the rest uses English for now.
+  return {
+    code,
+    locale,
+    translateCode,
+    liveVoice: false,
+    dir,
+    endonym,
+    names: namesOf(code),
+    ui: { ...en, ...copy },
+  };
+}
 
 export const LANGUAGES: Record<LangCode, LanguageDef> = {
   en: {
     code: "en",
     locale: "en-US",
+    translateCode: "en",
+    liveVoice: true,
+    dir: "ltr",
     endonym: "English",
-    names: { en: "English", es: "inglés" },
+    names: namesOf("en"),
     ui: en,
   },
   es: {
     code: "es",
     locale: "es-ES",
+    translateCode: "es",
+    liveVoice: true,
+    dir: "ltr",
     endonym: "Español",
-    names: { en: "Spanish", es: "español" },
+    names: namesOf("es"),
     ui: es,
   },
+  fr: extra("fr", "fr-FR", "fr", "Français", {
+    inviteTitle: "On peut parler ?",
+    inviteBody: "Je parle {host}. Scannez pour me parler en {guest}.",
+    joinTitle: "Rejoindre la conversation",
+    joinBody: "Touchez Rejoindre pour parler en {guest}. L'autre personne parle {host}.",
+    join: "Rejoindre",
+  }),
+  pt: extra("pt", "pt-BR", "pt", "Português", {
+    inviteTitle: "Podemos conversar?",
+    inviteBody: "Eu falo {host}. Escaneie para falar comigo em {guest}.",
+    joinTitle: "Entrar na conversa",
+    joinBody: "Toque em Entrar para falar em {guest}. A outra pessoa fala {host}.",
+    join: "Entrar",
+  }),
+  de: extra("de", "de-DE", "de", "Deutsch", {
+    inviteTitle: "Können wir reden?",
+    inviteBody: "Ich spreche {host}. Scanne den Code, um mit mir auf {guest} zu sprechen.",
+    joinTitle: "Gespräch beitreten",
+    joinBody: "Tippe auf Beitreten, um auf {guest} zu sprechen. Die andere Person spricht {host}.",
+    join: "Beitreten",
+  }),
+  it: extra("it", "it-IT", "it", "Italiano", {
+    inviteTitle: "Possiamo parlare?",
+    inviteBody: "Parlo {host}. Scansiona per parlare con me in {guest}.",
+    joinTitle: "Partecipa alla conversazione",
+    joinBody: "Tocca Partecipa per parlare in {guest}. L'altra persona parla {host}.",
+    join: "Partecipa",
+  }),
+  ar: extra(
+    "ar",
+    "ar",
+    "ar",
+    "العربية",
+    {
+      inviteTitle: "هل يمكننا التحدث؟",
+      inviteBody: "أنا أتحدث {host}. امسح الرمز للتحدث معي بـ{guest}.",
+      joinTitle: "انضم إلى المحادثة",
+      joinBody: "اضغط انضم للتحدث بـ{guest}. الشخص الآخر يتحدث {host}.",
+      join: "انضم",
+    },
+    "rtl",
+  ),
+  // Display label "中文（简体）", browser locale zh-CN, Google Translate code zh-CN.
+  zh: extra("zh", "zh-CN", "zh-CN", "中文（简体）", {
+    inviteTitle: "我们可以聊聊吗？",
+    inviteBody: "我说{host}。扫码用{guest}和我交谈。",
+    joinTitle: "加入对话",
+    joinBody: "点击加入，用{guest}交谈。对方说{host}。",
+    join: "加入",
+  }),
+  ja: extra("ja", "ja-JP", "ja", "日本語", {
+    inviteTitle: "話せますか？",
+    inviteBody: "私は{host}を話します。スキャンして{guest}で話しましょう。",
+    joinTitle: "会話に参加",
+    joinBody: "「参加」をタップして{guest}で話しましょう。相手は{host}を話します。",
+    join: "参加",
+  }),
+  ko: extra("ko", "ko-KR", "ko", "한국어", {
+    inviteTitle: "대화할 수 있을까요?",
+    inviteBody: "저는 {host}를 해요. 스캔해서 {guest}로 저와 이야기해요.",
+    joinTitle: "대화 참여",
+    joinBody: "참여를 눌러 {guest}로 이야기하세요. 상대방은 {host}를 해요.",
+    join: "참여",
+  }),
 };
+
+/** Live voice is offered only when both sides support it (today: English ↔ Spanish). */
+export function pairHasLiveVoice(pair: { host: LangCode; guest: LangCode } | null) {
+  return !!pair && LANGUAGES[pair.host].liveVoice && LANGUAGES[pair.guest].liveVoice;
+}
 
 export const LANG_CODES = Object.keys(LANGUAGES) as LangCode[];
 export const DEFAULT_HOST: LangCode = "es";

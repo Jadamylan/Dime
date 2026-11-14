@@ -7,6 +7,8 @@ import { nav as navFlags } from "@/lib/useRoom";
 export const Route = createFileRoute("/setup")({
   head: () => ({
     meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
       { title: "Host setup — Dime" },
       {
         name: "description",

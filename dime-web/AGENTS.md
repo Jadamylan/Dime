@@ -35,3 +35,11 @@ use the editor.
 - Languages and all UI copy live in src/config/languages.ts; new languages must not need transport/UI branching.
 - /demo is a pure function of elapsed time (src/lib/demoScript.ts) with no network, so it plays offline and deterministically.
 - Live captions use Gemini Live via raw WebSocket (src/lib/live.ts), one session per turn, opened only by the host.
+
+<!-- AGENT-MEMORY:BEGIN -->
+- Keep conversation height driven by the visual viewport and use an in-flow dock, so software keyboards cannot cover messages or the composer.
+- Keep microphone readiness, PCM conversion and capture tails in audio helpers; do not change room admission or transport for conversation UI work.
+- Build all public QR/link addresses through src/config/publicUrl.ts and gate room creation to its canonical hostname, so preview receipts and login-gated origins cannot reach guests.
+- Validate URLs at the shared Invite rendering/copy boundary as well as at generation, so every caller rejects nonpublic addresses and unexpected parameters.
+- Guest join parses canonical query parameters and legacy hash invitations, so existing invitations remain usable.
+<!-- AGENT-MEMORY:END -->

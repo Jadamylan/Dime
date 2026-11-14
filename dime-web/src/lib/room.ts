@@ -3,12 +3,13 @@
  * the live session; the guest never receives a key. All state is in memory only.
  */
 import type { DataConnection, Peer as PeerT } from "peerjs";
-import { LANGUAGES, type LangCode } from "@/config/languages";
+import { LANGUAGES, pairHasLiveVoice, type LangCode } from "@/config/languages";
 import { randomId, ID_RE } from "./ids";
 import { getKeys, onKeys } from "./keys";
 import { translateText } from "./translate";
 import { LiveSession, type LiveFail } from "./live";
 import { startMic, MicError, type MicHandle } from "./audio";
+import { buildGuestUrl, canCreateInvitation } from "@/config/publicUrl";
 
 export const PROTOCOL = 1;
 export const ROOM_TTL_MS = 30 * 60 * 1000;
@@ -16,13 +17,26 @@ export const MAX_TEXT = 500;
 export const RATE_PER_MIN = 20;
 export const MAX_TURN_MS = 60_000;
 export const MAX_FRAME_BYTES = 6400;
-const JOIN_TIMEOUT_MS = 20_000;
+const SIGNAL_TIMEOUT_MS = 15_000; // guest peer -> broker
+const CHANNEL_TIMEOUT_MS = 25_000; // WebRTC data channel open (ICE, maybe TURN)
+const ACK_TIMEOUT_MS = 8_000; // hello -> accepted
+const HOST_HELLO_MS = 40_000; // host waits longer than the guest's channel timeout
+const ICE_CONFIG: RTCConfiguration = {
+  iceServers: [
+    { urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] },
+    { urls: "stun:stun.cloudflare.com:3478" },
+    // PeerJS public TURN relay (best effort; used when phones cannot reach each other directly)
+    { urls: "turn:eu-0.turn.peerjs.com:3478", username: "peerjs", credential: "peerjsp" },
+    { urls: "turn:us-0.turn.peerjs.com:3478", username: "peerjs", credential: "peerjsp" },
+  ],
+  sdpSemantics: "unified-plan",
+} as RTCConfiguration;
 const FIRST_CAPTION_MS = 12_000;
 const DRAIN_MS = 3500;
 
 export type Role = "host" | "guest";
 export type ErrCode =
-  "token" | "full" | "expired" | "timeout" | "signal" | "roomgone" | "mic" | "rate" | "toolong";
+  "channel" | "noack" | "token" | "full" | "expired" | "timeout" | "signal" | "roomgone" | "mic" | "rate" | "toolong";
 export type MsgStatus = "pending" | "failed" | "delivered";
 export type TurnState = "connecting" | "listening" | "translating" | "final" | "unavailable";
 
@@ -58,7 +72,12 @@ export interface RoomState {
   turn: Turn | null;
   liveNote: string | null;
   signaling: "unknown" | "ok" | "failed";
+  /** Join progress, for the guest button and /debug. */
+  stage: JoinStage;
+  /** Sanitized handshake events (no ids, tokens, keys, text or audio). */
+  diag: { events: string[]; ice: string; lastOk: string; lastError: string };
 }
+export type JoinStage = "idle" | "invite" | "connecting" | "waitingHost" | "joined";
 
 const initial: RoomState = {
   role: null,
@@ -74,7 +93,40 @@ const initial: RoomState = {
   turn: null,
   liveNote: null,
   signaling: "unknown",
+  stage: "idle",
+  diag: { events: [], ice: "—", lastOk: "—", lastError: "—" },
 };
+
+function diag(ev: string, ok = true) {
+  const d = state.diag;
+  const t = new Date().toISOString().slice(11, 19);
+  set({
+    diag: {
+      ...d,
+      events: [...d.events, `${t} ${ev}`].slice(-30),
+      lastOk: ok ? ev : d.lastOk,
+      lastError: ok ? d.lastError : ev,
+    },
+  });
+}
+function watchIce(conn: DataConnection) {
+  const attach = () => {
+    const pc = (conn as unknown as { peerConnection?: RTCPeerConnection }).peerConnection;
+    if (!pc) return false;
+    const upd = () => {
+      set({ diag: { ...state.diag, ice: pc.iceConnectionState } });
+      diag("ice " + pc.iceConnectionState, pc.iceConnectionState !== "failed");
+    };
+    pc.addEventListener("iceconnectionstatechange", upd);
+    return true;
+  };
+  if (!attach()) {
+    let n = 0;
+    const i = setInterval(() => {
+      if (attach() || ++n > 20) clearInterval(i);
+    }, 100);
+  }
+}
 
 let state: RoomState = initial;
 let gen = 0; // bumps on every open/close so stale async opens abort
@@ -157,9 +209,9 @@ interface HostCtx {
 }
 let host: HostCtx | null = null;
 
-function keysState() {
+function keysState(pair = state.pair) {
   const k = getKeys();
-  return { typedReady: !!k.translate, liveReady: !!k.gemini };
+  return { typedReady: !!k.translate, liveReady: !!k.gemini && pairHasLiveVoice(pair) };
 }
 
 function hostSend(m: AnyMsg) {
@@ -171,15 +223,16 @@ export function hasActiveHost() {
 }
 
 export async function openHost(pair: { host: LangCode; guest: LangCode }) {
+  if (!canCreateInvitation(window.location.hostname)) return;
   if (hasActiveHost()) return;
   closeAll();
-  set({ ...initial, role: "host", phase: "opening", pair, ...keysState() });
+  set({ ...initial, role: "host", phase: "opening", pair, ...keysState(pair) });
   const my = gen;
   const Peer = await loadPeer();
   if (my !== gen) return;
   const id = "dime-" + randomId(16);
   const token = randomId(16);
-  const peer = new Peer(id, { debug: 0 });
+  const peer = new Peer(id, { debug: 0, config: ICE_CONFIG });
   const expiresAt = Date.now() + ROOM_TTL_MS;
   const onVis = () => {
     if (document.visibilityState === "visible") void requestWake();
@@ -204,19 +257,33 @@ export async function openHost(pair: { host: LangCode; guest: LangCode }) {
     live: { session: null, mic: null, seq: 0, timers: [], turnId: null },
   };
   document.addEventListener("visibilitychange", onVis);
+  const hostSignalTimer = setTimeout(() => {
+    if (host?.peer === peer && state.phase === "opening") {
+      diag("signaling timeout", false);
+      set({ phase: "error", error: "signal", signaling: "failed" });
+    }
+  }, SIGNAL_TIMEOUT_MS);
   peer.on("open", () => {
-    const q = new URLSearchParams({ r: id, t: token, h: pair.host, g: pair.guest });
+    clearTimeout(hostSignalTimer);
+    diag("signaling open");
     set({
       phase: "waiting",
       signaling: "ok",
       expiresAt,
-      joinUrl: `${window.location.origin}/join#${q}`,
+      joinUrl: buildGuestUrl({ roomId: id, token, pair }),
     });
     void requestWake();
   });
   peer.on("error", (e: { type?: string }) => {
+    diag("error " + (e.type ?? "unknown"), false);
     if (state.phase === "opening") set({ phase: "error", error: "signal", signaling: "failed" });
-    void e;
+  });
+  peer.on("disconnected", () => {
+    // Lost the broker (e.g. phone slept). Re-register the same id so the QR keeps working.
+    diag("signaling lost", false);
+    setTimeout(() => {
+      if (host?.peer === peer && peer.disconnected && !peer.destroyed) peer.reconnect();
+    }, 1000);
   });
   peer.on("connection", (conn) => hostOnConnection(conn));
 }
@@ -233,15 +300,23 @@ async function requestWake() {
 function hostOnConnection(conn: DataConnection) {
   const h = host!;
   let accepted = false;
+  diag("connection offer received");
+  watchIce(conn);
   const kill = setTimeout(() => {
-    if (!accepted) conn.close();
-  }, 10_000);
+    if (!accepted) {
+      diag("guest never said hello", false);
+      conn.close();
+    }
+  }, HOST_HELLO_MS);
+  conn.on("open", () => diag("data channel open"));
+  conn.on("error", (e: { type?: string }) => diag("conn error " + (e?.type ?? ""), false));
   conn.on("data", (raw) => {
     const m = raw as AnyMsg;
     if (!m || typeof m !== "object") return;
     if (!accepted) {
       if (m.t !== "hello") return;
       clearTimeout(kill);
+      diag("hello received");
       const reject = (reason: ErrCode) => {
         conn.send({ t: "reject", v: PROTOCOL, reason });
         setTimeout(() => conn.close(), 300);
@@ -270,7 +345,8 @@ function hostOnConnection(conn: DataConnection) {
         expiresAt: state.expiresAt,
         ...keysState(),
       });
-      set({ phase: "connected", justJoined: !isReconnect || state.justJoined });
+      diag("accepted sent");
+      set({ phase: "connected", stage: "joined", justJoined: !isReconnect || state.justJoined });
       for (const msg of state.messages) conn.send({ t: "msgState", msg });
       return;
     }
@@ -360,7 +436,12 @@ async function hostSubmit(
   broadcast(base);
   const { src, dst } = langs(from);
   try {
-    const translated = await translateText(clean, src, dst, getKeys().translate);
+    const translated = await translateText(
+      clean,
+      LANGUAGES[src].translateCode,
+      LANGUAGES[dst].translateCode,
+      getKeys().translate,
+    );
     h.seen.set(id, "delivered");
     broadcast({ ...base, translated, status: "delivered" });
   } catch {
@@ -388,7 +469,7 @@ async function hostBeginTurn(
     return false;
   }
   const key = getKeys().gemini;
-  if (!key) {
+  if (!key || !pairHasLiveVoice(state.pair)) {
     if (speaker === "guest") hostSend({ t: "turnDeny", turnId, reason: "nolive" });
     return false;
   }
@@ -415,7 +496,7 @@ async function hostBeginTurn(
     if (micReady && sessReady && state.turn?.id === turnId && state.turn.state === "connecting")
       setTurn({ ...state.turn, state: "listening" });
   };
-  const session = new LiveSession(key, dst, {
+  const session = new LiveSession(key, LANGUAGES[dst].translateCode, {
     onReady: () => {
       sessReady = true;
       maybeListening();
@@ -557,9 +638,9 @@ interface GuestCtx {
 let guest: GuestCtx | null = null;
 
 export function parseJoinHash(hash: string) {
-  const q = new URLSearchParams(hash.replace(/^#/, ""));
+  const q = new URLSearchParams(hash.replace(/^[#?]/, ""));
   const r = q.get("r") ?? "",
-    t = q.get("t") ?? "",
+    t = q.get("token") ?? q.get("t") ?? "",
     h = q.get("h"),
     g = q.get("g");
   if (!/^dime-[A-Za-z0-9_-]{16,64}$/.test(r) || !ID_RE.test(t)) return null;
@@ -572,13 +653,21 @@ export async function joinRoom(info: {
   token: string;
   pair: { host: LangCode; guest: LangCode };
 }) {
-  closeAll();
-  set({ ...initial, role: "guest", phase: "opening", pair: info.pair });
+  closeAll(); // also cleans up any failed previous attempt before a retry
+  set({ ...initial, role: "guest", phase: "opening", stage: "invite", pair: info.pair });
+  diag("opening invite");
   const my = gen;
-  const Peer = await loadPeer();
+  let Peer: Awaited<ReturnType<typeof loadPeer>>;
+  try {
+    Peer = await loadPeer();
+  } catch {
+    diag("could not load connection code", false);
+    if (my === gen) set({ phase: "error", error: "signal" });
+    return;
+  }
   if (my !== gen) return;
-  const peer = new Peer("dime-g-" + randomId(16), { debug: 0 });
-  guest = {
+  const peer = new Peer("dime-g-" + randomId(16), { debug: 0, config: ICE_CONFIG });
+  const g: GuestCtx = {
     peer,
     conn: null,
     roomId: info.roomId,
@@ -590,59 +679,88 @@ export async function joinRoom(info: {
     pendingGrant: null,
     attempts: 0,
   };
+  guest = g;
+  const signalTimer = setTimeout(() => {
+    if (guest === g && state.stage === "invite") {
+      diag("signaling timeout", false);
+      set({ phase: "error", error: "signal", signaling: "failed" });
+    }
+  }, SIGNAL_TIMEOUT_MS);
   peer.on("open", () => {
+    clearTimeout(signalTimer);
+    if (guest !== g) return;
+    diag("signaling open");
     set({ signaling: "ok" });
-    guestConnect();
+    if (!g.conn) guestConnect(); // a re-registration after a lost broker keeps the existing link
+  });
+  peer.on("disconnected", () => {
+    if (guest !== g) return;
+    diag("signaling lost", false);
+    setTimeout(() => {
+      if (guest === g && peer.disconnected && !peer.destroyed) peer.reconnect();
+    }, 1000);
   });
   peer.on("error", (e: { type?: string }) => {
-    if (e.type === "peer-unavailable") set({ phase: "error", error: "roomgone" });
-    else if (state.phase === "opening" || state.phase === "reconnecting")
+    if (guest !== g) return;
+    diag("error " + (e.type ?? "unknown"), false);
+    if (e.type === "peer-unavailable") {
+      clearTimeout(signalTimer);
+      set({ phase: "error", error: "roomgone" });
+    } else if (state.phase === "opening" || state.phase === "reconnecting") {
+      clearTimeout(signalTimer);
       set({
         phase: "error",
         error:
           e.type === "network" || e.type === "server-error" || e.type === "socket-error"
             ? "signal"
-            : "timeout",
+            : "channel",
         signaling: e.type === "network" ? "failed" : state.signaling,
       });
+    }
   });
 }
 
 function guestConnect() {
   const g = guest!;
+  set({ stage: "connecting" });
   const conn = g.peer.connect(g.roomId, { reliable: true });
   g.conn = conn;
+  watchIce(conn);
   let admitted = false;
-  const timer = setTimeout(() => {
-    if (!admitted && guest === g && state.phase !== "error") {
-      set({ phase: "error", error: "timeout" });
-      try {
-        conn.close();
-      } catch {
-        /* */
-      }
+  let helloSent = false;
+  let ackTimer: ReturnType<typeof setTimeout> | null = null;
+  const fail = (error: ErrCode, why: string) => {
+    if (admitted || guest !== g || state.phase === "error") return;
+    diag(why, false);
+    set({ phase: "error", error });
+    try {
+      conn.close();
+    } catch {
+      /* */
     }
-  }, JOIN_TIMEOUT_MS);
-  conn.on("open", () =>
-    conn.send({ t: "hello", v: PROTOCOL, token: g.token, reconnect: g.reconnect ?? undefined }),
-  );
+  };
+  const chanTimer = setTimeout(() => fail("channel", "data channel timeout"), CHANNEL_TIMEOUT_MS);
+  // Listen for the acknowledgement before saying hello.
   conn.on("data", (raw) => {
     const m = raw as AnyMsg;
     if (!m || typeof m !== "object") return;
     if (m.t === "reject") {
-      clearTimeout(timer);
+      if (ackTimer) clearTimeout(ackTimer);
+      diag("rejected", false);
       const r = m.reason;
       set({ phase: "error", error: r === "full" || r === "expired" ? r : "token" });
       return;
     }
     if (m.t === "accepted") {
-      clearTimeout(timer);
+      if (ackTimer) clearTimeout(ackTimer);
+      diag("accepted received");
       admitted = true;
       g.attempts = 0;
       g.reconnect = isStr(m.reconnect) ? m.reconnect : null;
       const p = m.pair as { host: LangCode; guest: LangCode };
       set({
         phase: "connected",
+        stage: "joined",
         pair: p,
         expiresAt: Number(m.expiresAt),
         typedReady: !!m.typedReady,
@@ -654,9 +772,25 @@ function guestConnect() {
     if (!admitted) return;
     guestHandle(m);
   });
+  conn.on("open", () => {
+    clearTimeout(chanTimer);
+    if (helloSent || guest !== g) return;
+    helloSent = true;
+    diag("data channel open");
+    set({ stage: "waitingHost" });
+    conn.send({ t: "hello", v: PROTOCOL, token: g.token, reconnect: g.reconnect ?? undefined });
+    diag("hello sent");
+    ackTimer = setTimeout(() => fail("noack", "no answer from host"), ACK_TIMEOUT_MS);
+  });
+  conn.on("error", (e: { type?: string }) => diag("conn error " + (e?.type ?? ""), false));
   conn.on("close", () => {
-    clearTimeout(timer);
-    if (guest !== g || !admitted) return;
+    clearTimeout(chanTimer);
+    if (ackTimer) clearTimeout(ackTimer);
+    if (guest !== g) return;
+    if (!admitted) {
+      fail(helloSent ? "noack" : "channel", "connection closed before joining");
+      return;
+    }
     if (state.phase === "connected" && g.reconnect && g.attempts < 5) {
       g.attempts++;
       set({ phase: "reconnecting" });

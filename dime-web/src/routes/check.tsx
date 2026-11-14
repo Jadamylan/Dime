@@ -11,6 +11,8 @@ import { DEMO_TOTAL_MS, demoAt } from "@/lib/demoScript";
 export const Route = createFileRoute("/check")({
   head: () => ({
     meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
       { title: "Preflight check — Dime" },
       {
         name: "description",

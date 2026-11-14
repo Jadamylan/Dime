@@ -1,3 +1,4 @@
+import { SPEECH_TAIL_MS } from "./speechTiming";
 /** Gemini Live Translate session over the documented browser WebSocket protocol. Host-only. */
 export const LIVE_MODEL = "gemini-3.5-live-translate-preview";
 const WS =
@@ -19,12 +20,16 @@ function b64(buf: ArrayBuffer): string {
   return btoa(s);
 }
 
-export function buildSetup(target: string) {
+// The only supported voice pair is English ↔ Spanish; speech locales are not target codes.
+export function buildSetup(target: string, speechLocale = target === "en" ? "es-US" : "en-US") {
   return {
     setup: {
       model: `models/${LIVE_MODEL}`,
-      inputAudioTranscription: {},
+      inputAudioTranscription: { languageCodes: [speechLocale] },
       outputAudioTranscription: {},
+      realtimeInputConfig: {
+        automaticActivityDetection: { disabled: false, silenceDurationMs: SPEECH_TAIL_MS },
+      },
       generationConfig: {
         responseModalities: ["AUDIO"],
         translationConfig: { targetLanguageCode: target, echoTargetLanguage: false },
@@ -40,6 +45,9 @@ export class LiveSession {
   private original = "";
   private translated = "";
   private done = false;
+  private ending = false;
+  private endTimer: ReturnType<typeof setTimeout> | null = null;
+  private audioEnded = false;
   private setupTimer: ReturnType<typeof setTimeout> | null = null;
   static MAX_QUEUE = 100; // ~10 s buffered while setup completes
 
@@ -103,7 +111,7 @@ export class LiveSession {
 
   /** Returns false if the startup buffer is full (caller should report). */
   send(pcm: ArrayBuffer): boolean {
-    if (this.done) return false;
+    if (this.done || this.audioEnded) return false;
     if (this.ready) {
       this.sendNow(pcm);
       return true;
@@ -120,8 +128,15 @@ export class LiveSession {
     );
   }
   endAudio() {
-    if (this.ready && this.ws?.readyState === WebSocket.OPEN)
-      this.ws.send(JSON.stringify({ realtimeInput: { audioStreamEnd: true } }));
+    if (this.ending || this.done) return;
+    this.ending = true;
+    // MicHandle.stop keeps a short tail; end the stream only after that tail is delivered.
+    this.endTimer = setTimeout(() => {
+      if (this.ready && this.ws?.readyState === WebSocket.OPEN) {
+        this.audioEnded = true;
+        this.ws.send(JSON.stringify({ realtimeInput: { audioStreamEnd: true } }));
+      }
+    }, SPEECH_TAIL_MS + 100);
   }
   get isReady() {
     return this.ready;
@@ -133,6 +148,7 @@ export class LiveSession {
   }
   close() {
     this.done = true;
+    if (this.endTimer) clearTimeout(this.endTimer);
     if (this.setupTimer) clearTimeout(this.setupTimer);
     try {
       this.ws?.close();

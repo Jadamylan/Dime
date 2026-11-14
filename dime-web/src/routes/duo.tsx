@@ -5,6 +5,8 @@ import { Wordmark } from "@/components/dime/Wordmark";
 export const Route = createFileRoute("/duo")({
   head: () => ({
     meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
       { title: "Duo concept — Dime" },
       {
         name: "description",

@@ -6,10 +6,13 @@ import { Invite } from "@/components/dime/Invite";
 import { Wordmark } from "@/components/dime/Wordmark";
 import { ui } from "@/config/languages";
 import { DEMO_TOTAL_MS, demoAt, type DemoFrame } from "@/lib/demoScript";
+import { PUBLIC_URL } from "@/config/publicUrl";
 
 export const Route = createFileRoute("/demo")({
   head: () => ({
     meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
       { title: "Scripted demo — Dime" },
       {
         name: "description",
@@ -27,7 +30,16 @@ export const Route = createFileRoute("/demo")({
   component: Demo,
 });
 
-const DEMO_URL = "https://dime.example/demo-qr-does-not-join";
+/**
+ * The demo QR always opens the canonical public demo, never a preview address.
+ */
+function useDemoUrl() {
+  const [url, setUrl] = useState("");
+  useEffect(() => {
+    setUrl(`${PUBLIC_URL}/demo`);
+  }, []);
+  return url;
+}
 
 function Phone({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -41,12 +53,21 @@ function Phone({ label, children }: { label: string; children: React.ReactNode }
 }
 
 function Side({ f, role }: { f: DemoFrame; role: "host" | "guest" }) {
+  const demoUrl = useDemoUrl();
   const my = role === "host" ? "es" : "en";
   const other = role === "host" ? "en" : "es";
   if (f.stage === "outro")
     return (
-      <div className="flex flex-1 flex-col items-center justify-center gap-4">
-        <Wordmark lang={my} />
+      <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center" lang={my}>
+        <Wordmark lang={my} size="sm" />
+        <div className="rounded-3xl bg-primary px-6 py-5 text-primary-foreground">
+          <p className="text-base font-medium">
+            {my === "es" ? "Cita confirmada" : "Appointment confirmed"}
+          </p>
+          <p className="text-2xl font-bold">
+            {my === "es" ? "Domingo · 2:00 p. m. · $85" : "Sunday · 2 p.m. · $85"}
+          </p>
+        </div>
       </div>
     );
   if (f.stage !== "talk") {
@@ -66,7 +87,7 @@ function Side({ f, role }: { f: DemoFrame; role: "host" | "guest" }) {
         />
       ) : (
         <div className="flex flex-1 items-center justify-center">
-          <Invite demo pair={{ host: "es", guest: "en" }} url={DEMO_URL} />
+          <Invite demo pair={{ host: "es", guest: "en" }} url={demoUrl} />
         </div>
       );
     const t = ui("en");

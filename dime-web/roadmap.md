@@ -1,0 +1,10 @@
+- [x] Use the canonical published address for QR invitations and block preview hosting.
+- [x] Test invitation rules and republish.
+- [x] Verify logged-out production pages, QR decoding, and a real peer join.
+- [x] Audit all invitation surfaces and safeguard the shared QR/copy boundary.
+- [ ] Verify physical second-phone scanning and real translated messages (requires devices and host Google key).
+- [x] Compact mobile conversation, distinguish speakers, and simplify tap-to-talk controls.
+- [x] Improve and test microphone PCM capture and documented Live configuration without changing invitations or transport.
+- [x] Verify mobile layouts and recovery actions, then request republishing.
+- [ ] Confirm latest deployment and repeat production typed-message checks (publication still serves previous version).
+- [ ] Verify real speech and iPhone keyboard behavior on two phones (requires devices and host Google key).

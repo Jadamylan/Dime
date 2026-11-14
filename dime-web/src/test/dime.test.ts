@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { validPair, fill, ui } from "@/config/languages";
+import { validPair, fill, ui, LANG_CODES, LANGUAGES, pairHasLiveVoice } from "@/config/languages";
 import { parseJoinHash, MAX_TEXT, RATE_PER_MIN, ROOM_TTL_MS } from "@/lib/room";
 import { translateText } from "@/lib/translate";
 import { randomId } from "@/lib/ids";
@@ -18,6 +18,32 @@ describe("languages", () => {
     );
     expect(fill(ui("es").inviteBody, "es", { host: "en", guest: "es" })).toBe(
       "Hablo inglés. Escanea para hablar conmigo en español.",
+    );
+  });
+});
+
+describe("expanded languages", () => {
+  it("offers 10 languages with English and Spanish first", () => {
+    expect(LANG_CODES).toHaveLength(10);
+    expect(LANG_CODES.slice(0, 2)).toEqual(["en", "es"]);
+  });
+  it("keeps provider codes separate from labels", () => {
+    expect(LANGUAGES.zh.endonym).toBe("中文（简体）");
+    expect(LANGUAGES.zh.locale).toBe("zh-CN");
+    expect(LANGUAGES.zh.translateCode).toBe("zh-CN");
+    expect(LANGUAGES.ar.dir).toBe("rtl");
+  });
+  it("live voice only for English and Spanish", () => {
+    expect(pairHasLiveVoice({ host: "es", guest: "en" })).toBe(true);
+    expect(pairHasLiveVoice({ host: "es", guest: "fr" })).toBe(false);
+  });
+  it("join link carries an added language", () => {
+    const r = "dime-" + randomId(), t = randomId();
+    expect(parseJoinHash(`#r=${r}&t=${t}&h=es&g=zh`)?.pair).toEqual({ host: "es", guest: "zh" });
+  });
+  it("guest invite is in the guest's language", () => {
+    expect(fill(ui("fr").inviteBody, "fr", { host: "es", guest: "fr" })).toBe(
+      "Je parle espagnol. Scannez pour me parler en français.",
     );
   });
 });
